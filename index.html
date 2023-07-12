@@ -1,0 +1,423 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Jeu 2D</title>
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+    }
+
+    canvas {
+      display: block;
+      border-radius: 10px; /* Arrondir les bords du canvas */
+    }
+  </style>
+</head>
+<body>
+  <canvas id="gameCanvas"></canvas>
+  <div id="score" style="position: absolute; top: 20px; left: 50%; transform: translateX(-50%); font-size: 24px;"></div>
+  <script>
+    // Récupérer la taille de la fenêtre
+    const windowWidth = window.innerWidth;
+    const windowHeight = window.innerHeight;
+
+    // Récupérer le canvas et le contexte
+    const canvas = document.getElementById("gameCanvas");
+    const ctx = canvas.getContext("2d");
+
+    // Définir la taille du canvas pour correspondre à la taille de la fenêtre
+    canvas.width = windowWidth;
+    canvas.height = windowHeight;
+
+    // Charger l'image du personnage
+    const characterImage = new Image();
+    characterImage.src = "./assets/image.png"; // Remplacez le chemin par le chemin vers votre image de personnage
+
+    // Charger l'image de l'arbre
+    const treeImage = new Image();
+    treeImage.src = "./assets/arbre.png"; // Remplacez le chemin par le chemin vers votre image d'arbre
+
+    // Charger l'image du lac
+    const lakeImage = new Image();
+    lakeImage.src = "./assets/lac.png"; // Remplacez le chemin par le chemin vers votre image de lac
+
+    // Charger l'image de la pièce
+    const coinImage = new Image();
+    coinImage.src = "./assets/piece.png"; // Remplacez le chemin par le chemin vers votre image de pièce
+
+    // Définir la position initiale du personnage au centre du canvas
+    let characterX = canvas.width / 2;
+    let characterY = canvas.height / 2;
+
+    // Définir la taille du personnage
+    const characterSize = 50;
+
+    // Définir la direction initiale du personnage
+    let characterDirection = "right";
+
+    // Définir la vitesse de déplacement du personnage
+    let characterSpeed = 10;
+
+    // Définir les variables pour la boucle de jeu
+    let lastFrameTime = 0;
+    const frameRate = 60; // Nombre de rafraîchissements par seconde
+
+    // Gérer les contrôles du clavier
+    const keysPressed = {};
+    document.addEventListener("keydown", handleKeyDown);
+    document.addEventListener("keyup", handleKeyUp);
+
+    function handleKeyDown(e) {
+      keysPressed[e.key] = true;
+    }
+
+    function handleKeyUp(e) {
+      keysPressed[e.key] = false;
+    }
+
+    // Générer une position aléatoire sur la carte
+    function generateRandomPosition() {
+      const x = Math.random() * canvas.width;
+      const y = Math.random() * canvas.height;
+      return { x, y };
+    }
+
+    // Vérifier la collision entre deux rectangles
+    function checkRectCollision(rect1, rect2) {
+      if (
+        rect1.x < rect2.x + rect2.width &&
+        rect1.x + rect1.width > rect2.x &&
+        rect1.y < rect2.y + rect2.height &&
+        rect1.y + rect1.height > rect2.y
+      ) {
+        return true;
+      }
+      return false;
+    }
+
+    // Classe pour représenter les lacs
+    class Lake {
+      constructor(x, y, size) {
+        this.x = x;
+        this.y = y;
+        this.size = size;
+      }
+    }
+
+    // Classe pour représenter les pièces
+    class Coin {
+      constructor(x, y) {
+        this.x = x;
+        this.y = y;
+        this.size = 25; // Taille de la pièce (modifiable selon vos besoins)
+      }
+    }
+
+    // Classe pour représenter le personnage ennemi
+    class Enemy {
+      constructor(x, y) {
+        this.x = x;
+        this.y = y;
+        this.size = characterSize;
+        this.speed = 5; // Vitesse de déplacement de l'ennemi
+      }
+
+      update() {
+        // Calculer la direction vers le joueur
+        const dx = characterX - this.x;
+        const dy = characterY - this.y;
+        const distance = Math.sqrt(dx * dx + dy * dy);
+
+        // Déplacer l'ennemi vers le joueur
+        this.x += (dx / distance) * this.speed;
+        this.y += (dy / distance) * this.speed;
+      }
+    }
+
+    // Générer les arbres aléatoires
+    const trees = [];
+    const numberOfTrees = Math.floor(Math.random() * 6) + 10; // Entre 10 et 15 arbres
+    for (let i = 0; i < numberOfTrees; i++) {
+      const treePosition = generateRandomPosition();
+      trees.push(treePosition);
+    }
+
+    // Générer les lacs aléatoires
+    const lakes = [];
+    const numberOfLakes = Math.floor(Math.random() * 4) + 2; // Entre 2 et 5 lacs
+    for (let i = 0; i < numberOfLakes; i++) {
+      let validPosition = false;
+      let lakeX, lakeY;
+      let lakeSize = 100; // Taille du lac (modifiable selon vos besoins)
+
+      // Générer une position aléatoire pour le lac
+      while (!validPosition) {
+        const position = generateRandomPosition();
+        const lakeRect = {
+          x: position.x,
+          y: position.y,
+          width: lakeSize,
+          height: lakeSize
+        };
+
+        // Vérifier si le lac entre en collision avec les arbres existants
+        let collision = false;
+        for (let j = 0; j < trees.length; j++) {
+          const tree = trees[j];
+          const treeRect = {
+            x: tree.x,
+            y: tree.y,
+            width: characterSize,
+            height: characterSize
+          };
+
+          if (checkRectCollision(lakeRect, treeRect)) {
+            collision = true;
+            break;
+          }
+        }
+
+        if (!collision) {
+          validPosition = true;
+          lakeX = position.x;
+          lakeY = position.y;
+        }
+      }
+
+      // Créer le lac et l'ajouter au tableau
+      const lake = new Lake(lakeX, lakeY, lakeSize);
+      lakes.push(lake);
+    }
+
+    // Générer les pièces aléatoires
+    const coins = [];
+    const numberOfCoins = Math.floor(Math.random() * 3) + 3; // Entre 3 et 5 pièces
+    for (let i = 0; i < numberOfCoins; i++) {
+      const coinPosition = generateRandomPosition();
+      const coin = new Coin(coinPosition.x, coinPosition.y);
+      coins.push(coin);
+    }
+
+    // Créer l'ennemi à une position initiale aléatoire
+    const enemy = new Enemy(
+      Math.random() * canvas.width,
+      Math.random() * canvas.height
+    );
+
+    // Variables du score
+    let score = 0;
+
+    // Vérifier la collision entre le joueur et les arbres, les lacs et les pièces
+    function checkCollision(newX, newY) {
+      const characterRect = {
+        x: newX,
+        y: newY,
+        width: characterSize,
+        height: characterSize
+      };
+
+      for (let i = 0; i < trees.length; i++) {
+        const tree = trees[i];
+        const treeRect = {
+          x: tree.x,
+          y: tree.y,
+          width: characterSize,
+          height: characterSize
+        };
+
+        if (checkRectCollision(characterRect, treeRect)) {
+          return true; // Collision avec un arbre détectée
+        }
+      }
+
+      for (let i = 0; i < lakes.length; i++) {
+        const lake = lakes[i];
+        const lakeRect = {
+          x: lake.x,
+          y: lake.y,
+          width: lake.size,
+          height: lake.size
+        };
+
+        if (checkRectCollision(characterRect, lakeRect)) {
+          // Collision avec un lac détectée
+          characterSpeed = 5; // Réduire la vitesse du personnage
+          characterImage.src = "./assets/image2.png"; // Changer l'image du personnage
+          return false; // Permettre de traverser le lac
+        }
+      }
+
+      for (let i = 0; i < coins.length; i++) {
+        const coin = coins[i];
+        const coinRect = {
+          x: coin.x,
+          y: coin.y,
+          width: coin.size,
+          height: coin.size
+        };
+
+        if (checkRectCollision(characterRect, coinRect)) {
+          // Collision avec une pièce détectée
+          coins.splice(i, 1); // Supprimer la pièce du tableau
+          score++; // Augmenter le score
+          updateScore(); // Mettre à jour le score affiché
+          generateNewCoin(); // Générer une nouvelle pièce
+          return false; // Permettre de traverser la pièce
+        }
+      }
+
+      characterSpeed = 10; // Rétablir la vitesse normale
+      characterImage.src = "./assets/image.png"; // Changer l'image du personnage
+      return false; // Pas de collision
+    }
+
+    // Générer une nouvelle pièce aléatoire
+    function generateNewCoin() {
+      const coinPosition = generateRandomPosition();
+      const coin = new Coin(coinPosition.x, coinPosition.y);
+      coins.push(coin);
+    }
+
+    // Mettre à jour le score affiché
+    function updateScore() {
+      const scoreElement = document.getElementById("score");
+      scoreElement.textContent = "Score: " + score;
+    }
+
+    // Fonction principale du jeu
+    function gameLoop(timestamp) {
+      // Calculer le temps écoulé depuis le dernier rafraîchissement
+      const elapsedTime = timestamp - lastFrameTime;
+      const frameTime = 1000 / frameRate;
+
+      // Mettre à jour la position du personnage en fonction des touches enfoncées
+      let newCharacterX = characterX;
+      let newCharacterY = characterY;
+
+      if (keysPressed["ArrowUp"]) {
+        newCharacterY = characterY - characterSpeed;
+        characterDirection = "up"; // Changer la direction vers le haut
+      }
+      if (keysPressed["ArrowDown"]) {
+        newCharacterY = characterY + characterSpeed;
+        characterDirection = "down"; // Changer la direction vers le bas
+      }
+      if (keysPressed["ArrowLeft"]) {
+        newCharacterX = characterX - characterSpeed;
+        characterDirection = "left"; // Changer la direction vers la gauche
+      }
+      if (keysPressed["ArrowRight"]) {
+        newCharacterX = characterX + characterSpeed;
+        characterDirection = "right"; // Changer la direction vers la droite
+      }
+
+      // Vérifier la collision entre le joueur et les arbres, les lacs et les pièces
+      if (!checkCollision(newCharacterX, newCharacterY)) {
+        if (
+          newCharacterX >= 0 &&
+          newCharacterX <= canvas.width - characterSize
+        ) {
+          characterX = newCharacterX;
+        }
+        if (
+          newCharacterY >= 0 &&
+          newCharacterY <= canvas.height - characterSize
+        ) {
+          characterY = newCharacterY;
+        }
+      }
+
+      // Effacer le canvas
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      // Dessiner les arbres
+      for (let i = 0; i < trees.length; i++) {
+        const tree = trees[i];
+        ctx.drawImage(treeImage, tree.x, tree.y, characterSize, characterSize);
+      }
+
+      // Dessiner les lacs
+      for (let i = 0; i < lakes.length; i++) {
+        const lake = lakes[i];
+        ctx.drawImage(lakeImage, lake.x, lake.y, lake.size, lake.size);
+      }
+
+      // Dessiner les pièces
+      for (let i = 0; i < coins.length; i++) {
+        const coin = coins[i];
+        ctx.drawImage(coinImage, coin.x, coin.y, coin.size, coin.size);
+      }
+
+      // Dessiner le personnage
+      if (characterDirection === "right") {
+        // Si la direction est vers la droite, afficher l'image sans la retourner
+        ctx.drawImage(characterImage, characterX, characterY, characterSize, characterSize);
+      } else {
+        // Si la direction est vers la gauche, retourner l'image horizontalement avant de l'afficher
+        ctx.save();
+        ctx.translate(characterX + characterSize, characterY);
+        ctx.scale(-1, 1);
+        ctx.drawImage(characterImage, 0, 0, characterSize, characterSize);
+        ctx.restore();
+      }
+
+      // Dessiner l'ennemi
+      ctx.fillStyle = "red";
+      ctx.fillRect(enemy.x, enemy.y, enemy.size, enemy.size);
+
+      // Mettre à jour la position de l'ennemi et vérifier les collisions avec le joueur
+      enemy.update();
+
+      // Vérifier la collision entre le joueur et l'ennemi
+      const enemyRect = {
+        x: enemy.x,
+        y: enemy.y,
+        width: enemy.size,
+        height: enemy.size
+      };
+
+      const characterRect = {
+        x: characterX,
+        y: characterY,
+        width: characterSize,
+        height: characterSize
+      };
+
+      if (checkRectCollision(characterRect, enemyRect)) {
+        score = 0; // Réinitialiser le score
+        updateScore(); // Mettre à jour le score affiché
+      }
+
+      // Demander le prochain rafraîchissement de la boucle de jeu
+      requestAnimationFrame(gameLoop);
+
+      // Mettre à jour le temps du dernier rafraîchissement
+      lastFrameTime = timestamp - (elapsedTime % frameTime);
+    }
+
+    // Attendre le chargement des images avant de lancer le jeu
+    Promise.all([
+      new Promise((resolve) => {
+        characterImage.addEventListener("load", resolve);
+      }),
+      new Promise((resolve) => {
+        treeImage.addEventListener("load", resolve);
+      }),
+      new Promise((resolve) => {
+        lakeImage.addEventListener("load", resolve);
+      }),
+      new Promise((resolve) => {
+        coinImage.addEventListener("load", resolve);
+      })
+    ]).then(() => {
+      // Lancer la boucle de jeu
+      requestAnimationFrame(gameLoop);
+    });
+
+    // Afficher le score initial
+    updateScore();
+  </script>
+</body>
+</html>
